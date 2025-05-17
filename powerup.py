@@ -5,7 +5,7 @@ class PowerUp:
         
         Args:
             x, y: Position in the maze grid
-            powerup_type: Type of powerup ("speed", "reveal", "teleport", "wall_break", "score_multiplier", etc.)
+            powerup_type: Type of powerup ("speed", "teleport", "wall_break", "score_multiplier", etc.)
             cell_size: Size of each cell for rendering
         """
         self.x = x
@@ -25,13 +25,11 @@ class PowerUp:
         """Get duration based on powerup type"""
         durations = {
             "speed": 10,         # 10 seconds of speed boost
-            "reveal": 15,        # 15 seconds path reveal
             "teleport": 0,       # instant effect
             "wall_break": 5,     # 5 seconds to break walls
             "score_multiplier": 20,  # 20 seconds of score multiplier
             "time_freeze": 10,   # 10 seconds time freeze
             "ghost": 8,          # 8 seconds to pass through walls
-            "vision": 12,        # 12 seconds of extended vision
             "decay_freeze": 15   # 15 seconds of decay freeze
         }
         return durations.get(self.type, 0)
@@ -40,13 +38,11 @@ class PowerUp:
         """Get strength/effect value based on powerup type"""
         strengths = {
             "speed": 2,          # 2x speed
-            "reveal": 10,        # Reveal 10 steps ahead
             "teleport": 5,       # Teleport up to 5 cells closer to goal
             "wall_break": 3,     # Break up to 3 walls
             "score_multiplier": 2.5,  # 2.5x score multiplier
             "time_freeze": 1,    # Freeze time completely
-            "ghost": 1,          # Pass through walls
-            "vision": 6          # See 6 cells in all directions (increased from 3)
+            "ghost": 1           # Pass through walls
         }
         return strengths.get(self.type, 1)
     
@@ -58,8 +54,6 @@ class PowerUp:
         """Get powerup color based on type"""
         if self.type == "speed":
             return (255, 0, 0)  # Red
-        elif self.type == "reveal":
-            return (0, 0, 255)  # Blue
         elif self.type == "teleport":
             return (255, 165, 0)  # Orange
         elif self.type == "wall_break":
@@ -70,8 +64,6 @@ class PowerUp:
             return (0, 255, 255)  # Cyan
         elif self.type == "ghost":
             return (220, 220, 220)  # Light Gray
-        elif self.type == "vision":
-            return (148, 0, 211)  # Dark Violet
         elif self.type == "objective":
             return (50, 205, 50)  # Lime Green
         elif self.type == "decay_freeze":
@@ -83,13 +75,11 @@ class PowerUp:
         """Get description text for the powerup"""
         descriptions = {
             "speed": "Speed Boost: Move faster for a short time",
-            "reveal": "Path Reveal: Shows optimal path to the goal",
             "teleport": "Teleport: Moves you closer to the goal",
             "wall_break": "Wall Breaker: Break through walls temporarily",
             "score_multiplier": "Score Multiplier: Increases points earned",
             "time_freeze": "Time Freeze: Stops the timer temporarily",
             "ghost": "Ghost Mode: Pass through walls without breaking them",
-            "vision": "Enhanced Vision: See powerups through walls",
             "objective": "Objective: Collect for extra points!",
             "decay_freeze": "Decay Shield: Prevents score decay temporarily"
         }

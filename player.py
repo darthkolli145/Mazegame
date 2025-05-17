@@ -9,10 +9,6 @@ class Player:
         self.speed_boost_duration = 0
         self.speed_multiplier = 1
         
-        self.path_revealed = False
-        self.reveal_duration = 0
-        self.reveal_strength = 0
-        
         self.wall_break_active = False
         self.wall_break_duration = 0
         self.wall_break_strength = 0
@@ -26,10 +22,6 @@ class Player:
         
         self.ghost_mode_active = False
         self.ghost_mode_duration = 0
-        
-        self.enhanced_vision_active = False
-        self.enhanced_vision_duration = 0
-        self.vision_range = 3
         
         # Decay freeze powerup
         self.decay_freeze_active = False
@@ -53,11 +45,6 @@ class Player:
             self.speed_boost_duration = duration
             self.speed_multiplier = strength
         
-        elif powerup_type == "reveal":
-            self.path_revealed = True
-            self.reveal_duration = duration
-            self.reveal_strength = strength
-        
         elif powerup_type == "wall_break":
             self.wall_break_active = True
             self.wall_break_duration = duration
@@ -75,11 +62,6 @@ class Player:
         elif powerup_type == "ghost":
             self.ghost_mode_active = True
             self.ghost_mode_duration = duration
-        
-        elif powerup_type == "vision":
-            self.enhanced_vision_active = True
-            self.enhanced_vision_duration = duration
-            self.vision_range = strength
         
         elif powerup_type == "decay_freeze":
             self.decay_freeze_active = True
@@ -110,8 +92,9 @@ class Player:
         return self.ghost_mode_active
     
     def get_vision_range(self):
-        """Get current vision range"""
-        return self.vision_range if self.enhanced_vision_active else 3
+        """Get the current vision range of the player"""
+        # Return a very large value to ensure the entire maze is visible
+        return 1000  # Effectively unlimited vision range
     
     def get_speed_multiplier(self):
         """Get current speed multiplier (affects cooldown time)"""
@@ -125,13 +108,6 @@ class Player:
                 self.has_speed_boost = False
                 self.speed_boost_duration = 0
                 self.speed_multiplier = 1
-        
-        if self.path_revealed:
-            self.reveal_duration -= dt
-            if self.reveal_duration <= 0:
-                self.path_revealed = False
-                self.reveal_duration = 0
-                self.reveal_strength = 0
         
         if self.wall_break_active:
             self.wall_break_duration -= dt
@@ -159,13 +135,6 @@ class Player:
                 self.ghost_mode_active = False
                 self.ghost_mode_duration = 0
         
-        if self.enhanced_vision_active:
-            self.enhanced_vision_duration -= dt
-            if self.enhanced_vision_duration <= 0:
-                self.enhanced_vision_active = False
-                self.enhanced_vision_duration = 0
-                self.vision_range = 3
-        
         if self.decay_freeze_active:
             self.decay_freeze_duration -= dt
             if self.decay_freeze_duration <= 0:
@@ -179,9 +148,6 @@ class Player:
         if self.has_speed_boost:
             active_powerups.append(f"Speed ({self.speed_boost_duration:.1f}s)")
         
-        if self.path_revealed:
-            active_powerups.append(f"Reveal ({self.reveal_duration:.1f}s)")
-        
         if self.wall_break_active:
             active_powerups.append(f"Wall Break ({self.wall_break_duration:.1f}s, {self.wall_break_strength} left)")
         
@@ -193,9 +159,6 @@ class Player:
         
         if self.ghost_mode_active:
             active_powerups.append(f"Ghost ({self.ghost_mode_duration:.1f}s)")
-        
-        if self.enhanced_vision_active:
-            active_powerups.append(f"Vision ({self.enhanced_vision_duration:.1f}s)")
         
         if self.decay_freeze_active:
             active_powerups.append(f"Decay Shield ({self.decay_freeze_duration:.1f}s)")

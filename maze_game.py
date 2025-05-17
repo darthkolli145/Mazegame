@@ -116,19 +116,19 @@ class MazeGame:
             
             # Random powerup type with weighted probabilities
             powerup_types = [
-                "speed", "reveal", "teleport", "wall_break", 
-                "score_multiplier", "time_freeze", "ghost", "vision",
-                "decay_freeze"  # New powerup to stop score decay
+                "speed", "teleport", "wall_break", 
+                "score_multiplier", "time_freeze", "ghost", 
+                "decay_freeze"  # Powerup to stop score decay
             ]
             
             # Weight more powerful abilities to be less common
-            weights = [0.2, 0.15, 0.15, 0.1, 0.1, 0.05, 0.1, 0.1, 0.05]  # Added weight for decay_freeze
+            weights = [0.25, 0.20, 0.15, 0.15, 0.05, 0.1, 0.1]  # Weights adjusted after removing vision powerups
             
             # Make certain powerups only available in higher difficulties
             if self.difficulty == "easy":
-                weights[3:] = [0.05, 0.05, 0, 0, 0, 0]  # Reduce wall_break and score_multiplier, remove others
+                weights[2:] = [0.05, 0.05, 0, 0, 0]  # Reduce wall_break and score_multiplier, remove others
             elif self.difficulty == "medium":
-                weights[5:] = [0.05, 0, 0, 0.05]  # Reduce time_freeze, remove some, keep decay_freeze
+                weights[4:] = [0.05, 0, 0.05]  # Reduce time_freeze, remove some, keep decay_freeze
             
             # Normalize weights
             total = sum(weights)
@@ -306,23 +306,6 @@ class MazeGame:
             self.score += bonus
             self.show_popup(f"+{bonus} Speed Boost!")
             
-        elif powerup_type == "reveal":
-            # Reveal a path to the goal - will be drawn in draw method
-            self.score += 200
-            self.show_popup("Path Revealed!")
-            
-            # Calculate path for visualization
-            if not hasattr(self, 'revealed_path'):
-                self.revealed_path = []
-            
-            # Use AlgorithmRunner to find path
-            temp_runner = AlgorithmRunner(self.maze, self.maze_size)
-            path = temp_runner._default_algorithm((self.player.x, self.player.y), self.goal_pos)
-            
-            # Limit path length by powerup strength
-            path_length = min(len(path), strength + 1) if path else 0
-            self.revealed_path = path[:path_length]
-            
         elif powerup_type == "teleport":
             # Teleport closer to the goal
             goal_x, goal_y = self.goal_pos
@@ -401,11 +384,6 @@ class MazeGame:
             # Stop score decay temporarily
             self.score += 250
             self.show_popup(f"Decay Shield for {duration}s!")
-            
-        elif powerup_type == "vision":
-            # Enhanced vision allows seeing through walls
-            self.score += 200
-            self.show_popup(f"Enhanced Vision for {duration}s!")
     
     def start_algorithm_mode(self):
         # Store current level before resetting
@@ -422,6 +400,9 @@ class MazeGame:
         # Enable algorithm mode (explicitly set this after reset_level which turns it off)
         self.algorithm_mode = True
         self.algorithm_runner = AlgorithmRunner(self.maze, self.maze_size)
+        # Pass the visited cells and vision range to the algorithm
+        vision_range = self.player.get_vision_range()
+        self.algorithm_runner.update_vision(self.visited_cells, vision_range)
         
         # Try to load user's algorithm if specified
         try:
@@ -439,6 +420,10 @@ class MazeGame:
             
             # Apply speed boost to cooldown if active
             effective_cooldown = self.move_cooldown / self.player.get_speed_multiplier()
+            
+            # Update algorithm's knowledge of visible cells
+            vision_range = self.player.get_vision_range()
+            self.algorithm_runner.update_vision(self.visited_cells, vision_range)
             
             # Only make a move if the cooldown has elapsed
             if time_since_last_move >= effective_cooldown:
@@ -539,9 +524,6 @@ class MazeGame:
         offset_x = (self.width - self.maze_size[0] * self.cell_size) // 2
         offset_y = (self.height - self.maze_size[1] * self.cell_size) // 2
         
-        # Calculate vision range for enhanced vision powerup
-        vision_range = self.player.get_vision_range()
-        
         # Draw the maze with fog of war if not in enhanced vision mode
         for y in range(self.maze_size[1]):
             for x in range(self.maze_size[0]):
@@ -552,47 +534,11 @@ class MazeGame:
                     self.cell_size
                 )
                 
-                # Check if cell is within vision range
-                dist_x = abs(x - self.player.x)
-                dist_y = abs(y - self.player.y)
-                # Use Manhattan distance for visibility check
-                in_vision = (dist_x + dist_y) <= vision_range * 1.5
-                
-                # Check if cell has been visited before
-                has_been_visited = (x, y) in self.visited_cells
-                
-                # Always show walls and paths within vision range or if previously visited
-                if in_vision or has_been_visited:
-                    if self.maze[y][x]:  # Wall
-                        pygame.draw.rect(self.screen, BLACK, rect)
-                    else:  # Path
-                        pygame.draw.rect(self.screen, WHITE, rect, 1)
-                else:
-                    # Draw solid fog of war for areas outside vision unless enhanced vision is active
-                    if not self.player.enhanced_vision_active:
-                        fog_color = (40, 40, 40)  # Darker solid color for fog of war
-                        pygame.draw.rect(self.screen, fog_color, rect)
-                    else:
-                        # When enhanced vision is active, show everything
-                        if self.maze[y][x]:  # Wall
-                            pygame.draw.rect(self.screen, BLACK, rect)
-                        else:  # Path
-                            pygame.draw.rect(self.screen, WHITE, rect, 1)
-        
-        # Draw revealed path if path reveal powerup is active
-        if self.player.path_revealed and hasattr(self, 'revealed_path'):
-            for x, y in self.revealed_path:
-                if (x, y) != (self.player.x, self.player.y):  # Don't highlight current position
-                    path_rect = pygame.Rect(
-                        offset_x + x * self.cell_size + self.cell_size // 4,
-                        offset_y + y * self.cell_size + self.cell_size // 4,
-                        self.cell_size // 2,
-                        self.cell_size // 2
-                    )
-                    # Draw with transparency
-                    s = pygame.Surface((self.cell_size // 2, self.cell_size // 2), pygame.SRCALPHA)
-                    s.fill((0, 0, 255, 128))  # Semi-transparent blue
-                    self.screen.blit(s, (path_rect.x, path_rect.y))
+                # Make entire maze visible - no fog of war
+                if self.maze[y][x]:  # Wall
+                    pygame.draw.rect(self.screen, BLACK, rect)
+                else:  # Path
+                    pygame.draw.rect(self.screen, WHITE, rect, 1)
         
         # Draw goal
         goal_rect = pygame.Rect(
@@ -605,21 +551,15 @@ class MazeGame:
         
         # Draw powerups within vision range
         for powerup in self.powerups:
-            # Check if powerup is within vision range or enhanced vision is active
-            dist_x = abs(powerup.x - self.player.x)
-            dist_y = abs(powerup.y - self.player.y)
-            in_vision = (dist_x + dist_y) <= vision_range * 1.5
-            has_been_visited = (powerup.x, powerup.y) in self.visited_cells
-            
-            if in_vision or self.player.enhanced_vision_active or has_been_visited:
-                color = powerup.get_color()
-                powerup_rect = pygame.Rect(
-                    offset_x + powerup.x * self.cell_size + self.cell_size // 4,
-                    offset_y + powerup.y * self.cell_size + self.cell_size // 4,
-                    self.cell_size // 2,
-                    self.cell_size // 2
-                )
-                pygame.draw.rect(self.screen, color, powerup_rect)
+            # All powerups are now visible
+            color = powerup.get_color()
+            powerup_rect = pygame.Rect(
+                offset_x + powerup.x * self.cell_size + self.cell_size // 4,
+                offset_y + powerup.y * self.cell_size + self.cell_size // 4,
+                self.cell_size // 2,
+                self.cell_size // 2
+            )
+            pygame.draw.rect(self.screen, color, powerup_rect)
         
         # Draw player with special effects
         player_rect = pygame.Rect(
@@ -743,13 +683,11 @@ class MazeGame:
             
             compact_powerups = [
                 (PowerUp(0, 0, "speed", self.cell_size), "Speed"),
-                (PowerUp(0, 0, "reveal", self.cell_size), "Path"),
                 (PowerUp(0, 0, "teleport", self.cell_size), "Port"),
                 (PowerUp(0, 0, "wall_break", self.cell_size), "Break"),
                 (PowerUp(0, 0, "score_multiplier", self.cell_size), "Score"),
                 (PowerUp(0, 0, "time_freeze", self.cell_size), "Time"),
                 (PowerUp(0, 0, "ghost", self.cell_size), "Ghost"),
-                (PowerUp(0, 0, "vision", self.cell_size), "Vision"),
                 (PowerUp(0, 0, "decay_freeze", self.cell_size), "Decay"),
                 (PowerUp(0, 0, "objective", self.cell_size), "Points")
             ]
@@ -786,13 +724,11 @@ class MazeGame:
             # Create temporary powerup objects to get colors and descriptions
             legend_powerups = [
                 PowerUp(0, 0, "speed", self.cell_size),
-                PowerUp(0, 0, "reveal", self.cell_size),
                 PowerUp(0, 0, "teleport", self.cell_size),
                 PowerUp(0, 0, "wall_break", self.cell_size),
                 PowerUp(0, 0, "score_multiplier", self.cell_size),
                 PowerUp(0, 0, "time_freeze", self.cell_size),
                 PowerUp(0, 0, "ghost", self.cell_size),
-                PowerUp(0, 0, "vision", self.cell_size),
                 PowerUp(0, 0, "decay_freeze", self.cell_size),
                 PowerUp(0, 0, "objective", self.cell_size)
             ]
@@ -1056,55 +992,59 @@ class MazeGame:
             ]
             
         elif level == 2:
-            # Level 2: More complex maze (19x19) with multiple paths and interesting features
+            # Level 2: New complex maze with spiral elements, multiple paths, and a central chamber
             pattern = [
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
-                [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
-                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                [1, 3, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+                [1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1],
+                [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1],
+                [1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1],
+                [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+                [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1],
+                [1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
+                [1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1],
+                [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+                [1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1],
+                [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
             
         else:  # level 3
-            # Level 3: Very complex maze (23x23) with multiple routes, loops, and dead ends - FIXED for solvability
+            # Level 3: Advanced labyrinth with chambers, hidden paths, and multiple routes
             pattern = [
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
-                [1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1],
-                [1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1],
-                [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-                [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-                [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-                [1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-                [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                [1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1],
+                [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1],
+                [1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1],
+                [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1],
+                [1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+                [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+                [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
+                [1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1],
+                [1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1],
+                [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1],
+                [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+                [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
         
         # Create a maze of the exact size needed for the pattern
