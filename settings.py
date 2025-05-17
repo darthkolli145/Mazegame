@@ -3,15 +3,15 @@ Game settings for the Maze Runner game
 """
 
 # Game window settings
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 600
+WINDOW_WIDTH = 1000
+WINDOW_HEIGHT = 800
 GAME_TITLE = "Maze Runner"
 FPS = 30
 
 # Maze settings
 DEFAULT_MAZE_WIDTH = 15
 DEFAULT_MAZE_HEIGHT = 15
-CELL_SIZE = 30
+CELL_SIZE = 25  # Reduced cell size to fit larger mazes on screen
 
 # Colors
 WHITE = (255, 255, 255)
@@ -25,32 +25,32 @@ YELLOW = (255, 255, 0)
 
 # Powerup settings
 POWERUP_COUNTS = {
-    "easy": 3,
-    "medium": 5,
-    "hard": 7
+    "easy": 1,
+    "medium": 2,
+    "hard": 3
 }
 
 # Portal settings
 PORTAL_PAIR_COUNTS = {
-    "easy": 2,
-    "medium": 3,
-    "hard": 4
+    "easy": 1,
+    "medium": 1,
+    "hard": 2
 }
 
 # Game difficulty settings
 DIFFICULTIES = {
     "easy": {
-        "maze_size": (10, 10),
-        "time_factor": 5,  # Lower time factor means more time available
-        "move_penalty": 2  # Lower move penalty means less score reduction
+        "maze_size": (15, 15),    # Level 1 maze size
+        "time_factor": 5,         # Lower time factor means more time available
+        "move_penalty": 2         # Lower move penalty means less score reduction
     },
     "medium": {
-        "maze_size": (15, 15),
+        "maze_size": (19, 19),    # Level 2 maze size
         "time_factor": 10,
         "move_penalty": 5
     },
     "hard": {
-        "maze_size": (20, 20),
+        "maze_size": (23, 23),    # Level 3 maze size
         "time_factor": 15,
         "move_penalty": 8
     }

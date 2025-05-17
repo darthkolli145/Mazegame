@@ -84,10 +84,14 @@ def solve_maze_a_star(maze, start_pos, goal_pos):
     # ...
     return path
 
-def solve_maze_wall_follower(maze, start_pos, goal_pos):
-    # Wall follower implementation
+def solve_maze_greedy(maze, start_pos, goal_pos):
+    # Greedy best-first search implementation
     # ...
     return path
 
-# You can try genetic algorithms, neural networks, etc.
+# Advanced idea: create an algorithm that prioritizes collecting powerups!
+def solve_maze_with_powerups(maze, start_pos, goal_pos, powerups=None):
+    # Algorithm that seeks out powerups before heading to the goal
+    # ...
+    return path
 """ 
