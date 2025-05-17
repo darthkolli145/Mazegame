@@ -95,7 +95,35 @@ class AlgorithmRunner:
         Create a copy of the maze with full visibility
         """
         # Simply return a copy of the actual maze - no fog of war
-        return np.copy(self.maze)
+        maze_copy = np.copy(self.maze)
+        
+        # Print debug info about the maze
+        player_x, player_y = player_pos
+        print(f"\nAlgorithm is using maze with:")
+        print(f"- Size: {self.maze_size[0]}x{self.maze_size[1]}")
+        print(f"- Player position: ({player_x}, {player_y})")
+        
+        # Check for powerups in the maze
+        powerup_counts = {}
+        for y in range(self.maze_size[1]):
+            for x in range(self.maze_size[0]):
+                value = maze_copy[y][x]
+                if value >= 4:  # Powerup
+                    powerup_counts[value] = powerup_counts.get(value, 0) + 1
+        
+        if powerup_counts:
+            print("- Powerups present in the maze:")
+            for code, count in powerup_counts.items():
+                powerup_name = {
+                    4: "Speed", 5: "Teleport", 6: "Wall Break", 
+                    7: "Score Multiplier", 8: "Time Freeze", 
+                    9: "Ghost", 10: "Decay Freeze", 11: "Objective"
+                }.get(code, f"Unknown ({code})")
+                print(f"  - {powerup_name}: {count}")
+        else:
+            print("- No powerups present in the maze")
+        
+        return maze_copy
     
     def _default_algorithm(self, start_pos, goal_pos):
         """
@@ -110,7 +138,7 @@ class AlgorithmRunner:
         visible_maze = self._get_visible_maze(start_pos)
         
         # Check if start or goal are walls in the visible maze
-        if visible_maze[start_y][start_x] or self.maze[goal_y][goal_x]:
+        if visible_maze[start_y][start_x] == 1 or self.maze[goal_y][goal_x] == 1:
             return []
         
         # If goal is not visible yet, find the closest visible cell to explore
@@ -147,10 +175,10 @@ class AlgorithmRunner:
             for dx, dy in directions:
                 nx, ny = x + dx, y + dy
                 
-                # Check if valid move
+                # Check if valid move - Path (0) or Powerup (≥4)
                 if (0 <= nx < self.maze_size[0] and 
                     0 <= ny < self.maze_size[1] and 
-                    not visible_maze[ny][nx] and 
+                    visible_maze[ny][nx] != 1 and  # Not a wall
                     (nx, ny) not in visited):
                     queue.append((nx, ny))
                     visited[(nx, ny)] = (x, y)
@@ -172,7 +200,7 @@ class AlgorithmRunner:
         for y in range(self.maze_size[1]):
             for x in range(self.maze_size[0]):
                 # Skip walls and invisible areas
-                if visible_maze[y][x]:
+                if visible_maze[y][x] == 1:  # Wall
                     continue
                 
                 # Check if this cell is at the frontier
@@ -182,7 +210,7 @@ class AlgorithmRunner:
                     if (0 <= nx < self.maze_size[0] and 
                         0 <= ny < self.maze_size[1] and 
                         self.is_cell_visible(nx, ny, start_x, start_y) and 
-                        not visible_maze[ny][nx]):
+                        visible_maze[ny][nx] != 1):  # Not a wall
                         is_frontier = True
                         break
                 
@@ -229,10 +257,10 @@ class AlgorithmRunner:
                 for dx, dy in [(1, 0), (0, 1), (-1, 0), (0, -1)]:
                     nx, ny = x + dx, y + dy
                     
-                    # Check if valid move in visible maze
+                    # Check if valid move in visible maze - Path (0) or Powerup (≥4)
                     if (0 <= nx < self.maze_size[0] and 
                         0 <= ny < self.maze_size[1] and 
-                        not visible_maze[ny][nx] and 
+                        visible_maze[ny][nx] != 1 and  # Not a wall 
                         (nx, ny) not in visited and
                         self.is_cell_visible(nx, ny, start_x, start_y)):
                         queue.append((nx, ny))
@@ -247,7 +275,7 @@ class AlgorithmRunner:
             nx, ny = start_x + dx, start_y + dy
             if (0 <= nx < self.maze_size[0] and 
                 0 <= ny < self.maze_size[1] and 
-                not visible_maze[ny][nx]):
+                visible_maze[ny][nx] != 1):  # Not a wall
                 return [(start_x, start_y), (nx, ny)]
         
         # No valid moves, return just the current position

@@ -71,7 +71,10 @@ class MazeGame:
         self.powerups = []
         self.portals = []  # We'll keep this empty list but not use it
         self._generate_powerups(POWERUP_COUNTS[difficulty])
-        # No longer generating portals
+        
+        # Debug: Print maze with powerups
+        print("\nInitial maze state with powerups:")
+        self.print_numeric_maze()
         
         # Scoreboard
         self.scoreboard = Scoreboard()
@@ -103,15 +106,33 @@ class MazeGame:
         # Reset the count of objectives
         self.total_objectives = 0
         
+        # Mapping of powerup types to integer codes in the maze
+        powerup_codes = {
+            "speed": 4,
+            "teleport": 5,
+            "wall_break": 6,
+            "score_multiplier": 7,
+            "time_freeze": 8,
+            "ghost": 9,
+            "decay_freeze": 10,
+            "objective": 11
+        }
+        
+        # Create a mapping of codes to powerup types for later reference
+        self.powerup_code_to_type = {v: k for k, v in powerup_codes.items()}
+        
         # Use a fixed seed based on difficulty and level for consistent powerup placement
         random.seed(hash(self.difficulty) + self.current_level * 100)
+        
+        # Keep track of powerups to show on the map until collected
+        self.powerups = []
         
         for _ in range(count):
             # Don't place powerups at start, end, or walls
             while True:
                 x = random.randint(0, self.maze_size[0] - 1)
                 y = random.randint(0, self.maze_size[1] - 1)
-                if (x, y) != (self.player.x, self.player.y) and (x, y) != self.goal_pos and not self.maze[y][x]:
+                if (x, y) != (self.player.x, self.player.y) and (x, y) != self.goal_pos and self.maze[y][x] == 0:
                     break
             
             # Random powerup type with weighted probabilities
@@ -135,6 +156,12 @@ class MazeGame:
             weights = [w/total for w in weights]
             
             powerup_type = random.choices(powerup_types, weights=weights, k=1)[0]
+            
+            # Place the powerup in the maze
+            powerup_code = powerup_codes[powerup_type]
+            self.maze[y][x] = powerup_code
+            
+            # Also add to powerups list for rendering and tracking
             self.powerups.append(PowerUp(x, y, powerup_type, self.cell_size))
             
             # Increment total objectives
@@ -157,19 +184,38 @@ class MazeGame:
             while attempts < max_attempts:
                 x = random.randint(0, self.maze_size[0] - 1)
                 y = random.randint(0, self.maze_size[1] - 1)
-                if (x, y) != (self.player.x, self.player.y) and (x, y) != self.goal_pos and not self.maze[y][x]:
+                if (x, y) != (self.player.x, self.player.y) and (x, y) != self.goal_pos and self.maze[y][x] == 0:
                     valid_spot = True
+                    # Check we're not placing on another powerup
                     for p in self.powerups:
                         if p.x == x and p.y == y:
                             valid_spot = False
                             break
                     if valid_spot:
+                        # Place the objective powerup in the maze
+                        self.maze[y][x] = powerup_codes["objective"]
+                        
                         # Create a special "objective" powerup that's just for collection points
                         self.powerups.append(PowerUp(x, y, "objective", self.cell_size))
                         self.total_objectives += 1
                         break
                 attempts += 1
     
+    def print_numeric_maze(self):
+        """Print the current numeric maze values to the console"""
+        print("\nMaze Matrix with Numeric Values:")
+        print("Legend: 0=Path, 1=Wall, 2=Start, 3=Goal")
+        print("4=Speed, 5=Teleport, 6=Wall_Break, 7=Score_Multiplier")
+        print("8=Time_Freeze, 9=Ghost, 10=Decay_Freeze, 11=Objective\n")
+        
+        for y in range(self.maze_size[1]):
+            row = []
+            for x in range(self.maze_size[0]):
+                val = str(self.maze[y][x]).rjust(2)
+                row.append(val)
+            print(" ".join(row))
+        print("\n")
+
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -227,6 +273,10 @@ class MazeGame:
                 elif event.key == pygame.K_3:
                     self.change_difficulty("hard")
                 
+                # Print maze matrix (debug)
+                elif event.key == pygame.K_p:
+                    self.print_numeric_maze()
+                
                 # Quit
                 if event.key == pygame.K_ESCAPE:
                     pygame.quit()
@@ -240,7 +290,8 @@ class MazeGame:
         is_within_bounds = (0 <= new_x < self.maze_size[0] and 0 <= new_y < self.maze_size[1])
         
         if is_within_bounds:
-            is_wall = self.maze[new_y][new_x]
+            cell_value = self.maze[new_y][new_x]
+            is_wall = (cell_value == 1)  # Wall is represented by 1
             
             # Check if player can move through wall
             can_pass = False
@@ -254,12 +305,33 @@ class MazeGame:
             elif self.player.can_break_wall() and is_wall:
                 if self.player.break_wall():
                     # Break the wall permanently
-                    self.maze[new_y][new_x] = False
+                    self.maze[new_y][new_x] = 0  # Change from wall (1) to path (0)
                     can_pass = True
                     self.show_popup("Wall broken!")
             
             # Make the move if path is clear or player can pass through
             if (not is_wall) or can_pass:
+                # Check for powerups before moving
+                if cell_value >= 4:  # Cell contains a powerup
+                    # Identify powerup type from cell value
+                    powerup_type = self.powerup_code_to_type.get(cell_value)
+                    if powerup_type:
+                        # Find the matching powerup object
+                        collected_powerup = None
+                        for powerup in self.powerups[:]:
+                            if powerup.x == new_x and powerup.y == new_y:
+                                collected_powerup = powerup
+                                break
+                        
+                        if collected_powerup:
+                            # Apply the powerup effect
+                            self.apply_powerup(collected_powerup)
+                            # Remove from tracking list
+                            self.powerups.remove(collected_powerup)
+                            # Clear the cell in the maze
+                            self.maze[new_y][new_x] = 0  # Reset to regular path
+                
+                # Now move the player
                 self.player.move(new_x, new_y)
                 self.moves += 1
                 
@@ -270,12 +342,6 @@ class MazeGame:
                 for nx, ny in [(new_x+1, new_y), (new_x-1, new_y), (new_x, new_y+1), (new_x, new_y-1)]:
                     if 0 <= nx < self.maze_size[0] and 0 <= ny < self.maze_size[1]:
                         self.visited_cells.add((nx, ny))
-                
-                # Check for powerups
-                for powerup in self.powerups[:]:
-                    if powerup.x == new_x and powerup.y == new_y:
-                        self.apply_powerup(powerup)
-                        self.powerups.remove(powerup)
                 
                 # Check for goal
                 if (new_x, new_y) == self.goal_pos or (self.player.x, self.player.y) == self.goal_pos:
@@ -524,7 +590,7 @@ class MazeGame:
         offset_x = (self.width - self.maze_size[0] * self.cell_size) // 2
         offset_y = (self.height - self.maze_size[1] * self.cell_size) // 2
         
-        # Draw the maze with fog of war if not in enhanced vision mode
+        # Draw the maze - now using integer values instead of booleans
         for y in range(self.maze_size[1]):
             for x in range(self.maze_size[0]):
                 rect = pygame.Rect(
@@ -534,11 +600,30 @@ class MazeGame:
                     self.cell_size
                 )
                 
-                # Make entire maze visible - no fog of war
-                if self.maze[y][x]:  # Wall
+                cell_value = self.maze[y][x]
+                
+                # Draw based on cell value
+                if cell_value == 1:  # Wall
                     pygame.draw.rect(self.screen, BLACK, rect)
-                else:  # Path
+                elif cell_value == 0:  # Path
                     pygame.draw.rect(self.screen, WHITE, rect, 1)
+                elif cell_value >= 4:  # Powerup
+                    pygame.draw.rect(self.screen, WHITE, rect, 1)  # Draw path background
+                    
+                    # Find matching powerup to get color
+                    powerup_type = self.powerup_code_to_type.get(cell_value)
+                    if powerup_type:
+                        # Create small rect for powerup
+                        powerup_rect = pygame.Rect(
+                            offset_x + x * self.cell_size + self.cell_size // 4,
+                            offset_y + y * self.cell_size + self.cell_size // 4,
+                            self.cell_size // 2,
+                            self.cell_size // 2
+                        )
+                        
+                        # Get powerup color
+                        temp_powerup = PowerUp(0, 0, powerup_type, self.cell_size)
+                        pygame.draw.rect(self.screen, temp_powerup.get_color(), powerup_rect)
         
         # Draw goal
         goal_rect = pygame.Rect(
@@ -548,18 +633,6 @@ class MazeGame:
             self.cell_size
         )
         pygame.draw.rect(self.screen, GREEN, goal_rect)
-        
-        # Draw powerups within vision range
-        for powerup in self.powerups:
-            # All powerups are now visible
-            color = powerup.get_color()
-            powerup_rect = pygame.Rect(
-                offset_x + powerup.x * self.cell_size + self.cell_size // 4,
-                offset_y + powerup.y * self.cell_size + self.cell_size // 4,
-                self.cell_size // 2,
-                self.cell_size // 2
-            )
-            pygame.draw.rect(self.screen, color, powerup_rect)
         
         # Draw player with special effects
         player_rect = pygame.Rect(
@@ -970,12 +1043,13 @@ class MazeGame:
     def _get_maze_for_level(self, level):
         """Return a fixed maze for the specified level"""
         # Define the mazes based on difficulty level
-        # 0 = path, 1 = wall, 2 = goal, 3 = start
+        # New representation: 0 = path, 1 = wall, 2 = start, 3 = goal
+        # (Previously: 0 = path, 1 = wall, 2 = goal, 3 = start)
         if level == 1:
             # Level 1: Medium complexity maze (15x15) with multiple path options
             pattern = [
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
                 [1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
                 [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1],
                 [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
@@ -987,7 +1061,7 @@ class MazeGame:
                 [1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
                 [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1],
                 [1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
             
@@ -995,7 +1069,7 @@ class MazeGame:
             # Level 2: New complex maze with spiral elements, multiple paths, and a central chamber
             pattern = [
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 3, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+                [1, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
                 [1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
                 [1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1],
@@ -1011,7 +1085,7 @@ class MazeGame:
                 [1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1],
                 [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1],
                 [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
             
@@ -1019,7 +1093,7 @@ class MazeGame:
             # Level 3: Advanced labyrinth with chambers, hidden paths, and multiple routes
             pattern = [
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [1, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                [1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
                 [1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1],
                 [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1],
                 [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
@@ -1043,14 +1117,14 @@ class MazeGame:
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1],
                 [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
                 [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
         
         # Create a maze of the exact size needed for the pattern
         height = len(pattern)
         width = len(pattern[0])
-        maze = np.ones((height, width), dtype=bool)
+        maze = np.ones((height, width), dtype=int)  # Changed from bool to int
         
         # Find start and goal positions
         start_pos = None
@@ -1060,14 +1134,14 @@ class MazeGame:
         for y in range(height):
             for x in range(width):
                 value = pattern[y][x]
-                if value == 3:  # Start position
+                if value == 2:  # Start position
                     start_pos = (x, y)
-                    maze[y][x] = False  # Path
-                elif value == 2:  # Goal position
+                    maze[y][x] = 0  # Mark as path
+                elif value == 3:  # Goal position
                     goal_pos = (x, y)
-                    maze[y][x] = False  # Path
+                    maze[y][x] = 0  # Mark as path
                 else:
-                    maze[y][x] = bool(value)  # 1 = wall, 0 = path
+                    maze[y][x] = value  # Set the cell value (0 = path, 1 = wall)
         
         # Update player start position if found
         if start_pos:
@@ -1185,7 +1259,7 @@ class MazeGame:
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 nx, ny = x + dx, y + dy
                 if (0 <= nx < width and 0 <= ny < height and 
-                    not maze[ny][nx] and (nx, ny) not in visited):
+                    maze[ny][nx] == 0 and (nx, ny) not in visited):  # Path is represented by 0
                     queue.append((nx, ny))
         
         return False
@@ -1211,6 +1285,10 @@ class MazeGame:
         self.powerups = []
         self.portals = []  # We'll keep this empty list but not use it
         self._generate_powerups(POWERUP_COUNTS[self.difficulty])
+        
+        # Debug: Print maze after regenerating powerups
+        print(f"\nReset Level {self.current_level} - Maze with powerups:")
+        self.print_numeric_maze()
         
         # Make sure score decay rate is updated
         self.score_decay_rate = self._get_decay_rate()
